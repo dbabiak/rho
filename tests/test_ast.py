@@ -51,3 +51,14 @@ def test_compile_eval_basic(n: int):
     expected = run(BASIC_PROGRAM, _input=n)
     actual = run_eval(compiled, _input=n)
     assert expected == actual
+
+
+def test_typecheck_basic_successes():
+    assert Print(Literal(0)).typecheck() is None
+    assert BASIC_PROGRAM.typecheck() is None
+    
+    
+def test_typecheck_basic_failures():
+    expected = RhoTypeError(msg='Plus.right is not a number: Print(val=Literal(val=7))')
+    actual = Plus(Literal(0), Print(Literal(7))).typecheck()
+    assert expected == actual

@@ -4,6 +4,11 @@ from operator import add, mul
 
 
 @dataclass
+class RhoTypeError(Exception):
+    msg: str
+
+
+@dataclass
 class AST:
     def eval(self) -> Any:
         pass
@@ -12,6 +17,9 @@ class AST:
         return self
 
     def compile(self) -> str:
+        pass
+
+    def typecheck(self) -> Optional[RhoTypeError]:
         pass
 
 
@@ -27,6 +35,9 @@ class Print(AST):
 
     def compile(self):
         return f"print({self.val.compile()})"
+
+    def typecheck(self) -> Optional[RhoTypeError]:
+        return self.val.typecheck()
 
 
 @dataclass
@@ -50,6 +61,15 @@ class Plus(AST):
     def compile(self) -> str:
         return f"({self.left.compile()} + {self.right.compile()})"
 
+    def typecheck(self) -> Optional[RhoTypeError]:
+        if not is_numeric(self.left):
+            return RhoTypeError(f"Plus.left is not a number: {self.left}")
+
+        if not is_numeric(self.right):
+            return RhoTypeError(f"Plus.right is not a number: {self.right}")
+
+        return self.left.typecheck() or self.right.typecheck()
+
 
 @dataclass
 class Times(AST):
@@ -71,6 +91,15 @@ class Times(AST):
 
     def compile(self) -> str:
         return f"({self.left.compile()} * {self.right.compile()})"
+
+    def typecheck(self) -> Optional[RhoTypeError]:
+        if not is_numeric(self.left):
+            return RhoTypeError(f"Times.left is not a number: {self.left}")
+
+        if not is_numeric(self.right):
+            return RhoTypeError(f"Times.right is not a number: {self.right}")
+
+        return self.left.typecheck() or self.right.typecheck()
 
 
 @dataclass
@@ -96,4 +125,9 @@ class GetNumber(AST):
 BASIC_PROGRAM = Print(
     Plus(Times(Literal(13), Literal(2)), Times(GetNumber(), Literal(7)))
 )
+
 B = BASIC_PROGRAM
+
+
+def is_numeric(e: AST) -> bool:
+    return isinstance(e, (Plus, Times, Literal, GetNumber))
