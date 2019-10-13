@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import *
 from operator import add, mul
+from functools import partial
 
 
 @dataclass
@@ -122,12 +123,52 @@ class GetNumber(AST):
         return "int(input())"
 
 
+def is_numeric(e: AST) -> bool:
+    return isinstance(e, (Plus, Times, Literal, GetNumber))
+
+
+def children(node: AST) -> Iterable[AST]:
+    if isinstance(node, (GetNumber, Literal)):
+        return tuple()
+
+    if isinstance(node, (Plus, Times)):
+        return node.left, node.right
+
+    if isinstance(node, Print):
+        return (node.val,)
+
+
+def transform(
+    node: AST, predicate: Callable[[AST], bool], f: Callable[[AST], AST]
+) -> AST:
+    if predicate(node):
+        return f(node)
+
+    _children = children(node)
+    if not _children:
+        return node
+    else:
+        f_children = (transform(c, predicate, f) for c in _children)
+        return type(node)(*f_children)
+
+
+def is_even(n: int):
+    return abs(n) != 2 and n % 2 == 0
+
+
+no_evens = partial(
+    transform,
+    predicate=lambda node: isinstance(node, Literal) and is_even(node.val),
+    f=lambda node: Plus(Literal((node.val // 2) + 1), Literal((node.val // 2) - 1)),
+)
+
 BASIC_PROGRAM = Print(
     Plus(Times(Literal(13), Literal(2)), Times(GetNumber(), Literal(7)))
 )
 
+BASIC_PROGRAM_WITH_EVENS = Print(
+    Plus(Times(Literal(13), Literal(4)), Times(GetNumber(), Literal(7)))
+)
+
 B = BASIC_PROGRAM
-
-
-def is_numeric(e: AST) -> bool:
-    return isinstance(e, (Plus, Times, Literal, GetNumber))
+BE = BASIC_PROGRAM_WITH_EVENS
