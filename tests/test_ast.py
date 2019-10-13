@@ -1,59 +1,53 @@
-import io
-
-import hypothesis.strategies
+from hypothesis import given
+from hypothesis.strategies import integers
 
 from rho.ast import *
-from tests import stdin_input_of, stdout
+from rho.ast import AST, Print
+from tests import run_thunk, run, run_eval
 
-BASIC_PROGRAM = Print(
-    Plus(Times(Literal(13), Literal(2)), Times(GetNumber(), Literal(7)))
+import hypothesis
+from hypothesis import settings
+settings.register_profile(
+    "dev", max_examples=10, verbosity=hypothesis.Verbosity.verbose
 )
 
 
-@hypothesis.given(n=hypothesis.strategies.integers())
-@hypothesis.settings(
-    max_examples=20,
-    # verbosity=hypothesis.Verbosity.verbose,
-)
-def test_eval_basic_program(n: int):
-    program = BASIC_PROGRAM
-    out: io.StringIO
-    with stdin_input_of(str(n)), stdout() as out:
-        print(13 * 2 + int(input()) * 7)
-        out.seek(0)
-        expected = out.read()
-
-    with stdin_input_of(str(n)), stdout() as out:
-        program.eval()
-        out.seek(0)
-        actual = out.read()
-
-    print(f"n: {n} -> {expected}")
-    assert expected == actual, f"{expected} != {actual}"
+@given(n=integers())
+def test_eval_basic2(n: int):
+    expected = run_eval("print(13 * 2 + int(input()) * 7)", _input=n)
+    actual = run(BASIC_PROGRAM, _input=n)
+    assert expected == actual
 
 
-@hypothesis.given(n=hypothesis.strategies.integers())
-@hypothesis.settings(
-    max_examples=20,
-    # verbosity=hypothesis.Verbosity.verbose,
-)
-def test_optimize_basic_program(n: int):
-    program = BASIC_PROGRAM
-    optimized = program.optimize()
-    out: io.StringIO
-    with stdin_input_of(str(n)), stdout() as out:
-        program.eval()
-        out.seek(0)
-        expected = out.read()
-
-    with stdin_input_of(str(n)), stdout() as out:
-        optimized.eval()
-        out.seek(0)
-        actual = out.read()
-
-    print(f"n: {n} -> {expected}")
-    assert expected == actual, f"{expected} != {actual}"
+@given(n=integers())
+def test_eval_basic(n: int):
+    expected = run_thunk(lambda: print(13 * 2 + int(input()) * 7), _input=n)
+    actual = run(BASIC_PROGRAM, _input=n)
+    assert expected == actual
 
 
-# test_eval_basic_program()
-test_optimize_basic_program()
+@given(n=integers())
+def test_optimize_basic(n: int):
+    program: Print = BASIC_PROGRAM
+    optimized: AST = program.optimize()
+
+    expected = run(BASIC_PROGRAM, _input=n)
+    actual = run(optimized, _input=n)
+
+    assert expected == actual
+
+
+def test_compile_basic():
+    program: Print = BASIC_PROGRAM
+    compiled: str = program.compile()
+    assert compiled == "print(((13 * 2) + (int(input()) * 7)))"
+
+
+@given(n=integers())
+def test_compile_eval_basic(n: int):
+    program: Print = BASIC_PROGRAM
+    compiled: str = program.compile()
+
+    expected = run(BASIC_PROGRAM, _input=n)
+    actual = run_eval(compiled, _input=n)
+    assert expected == actual

@@ -11,6 +11,9 @@ class AST:
     def optimize(self) -> "AST":
         return self
 
+    def compile(self) -> str:
+        pass
+
 
 @dataclass
 class Print(AST):
@@ -21,6 +24,9 @@ class Print(AST):
 
     def optimize(self) -> "AST":
         return type(self)(self.val.optimize())
+
+    def compile(self):
+        return f"print({self.val.compile()})"
 
 
 @dataclass
@@ -41,6 +47,9 @@ class Plus(AST):
         else:
             return type(self)(left, right)
 
+    def compile(self) -> str:
+        return f"({self.left.compile()} + {self.right.compile()})"
+
 
 @dataclass
 class Times(AST):
@@ -60,6 +69,9 @@ class Times(AST):
         else:
             return type(self)(left, right)
 
+    def compile(self) -> str:
+        return f"({self.left.compile()} * {self.right.compile()})"
+
 
 @dataclass
 class Literal(AST):
@@ -68,8 +80,20 @@ class Literal(AST):
     def eval(self) -> int:
         return self.val
 
+    def compile(self) -> str:
+        return str(self.val)
+
 
 @dataclass
 class GetNumber(AST):
     def eval(self) -> int:
-        return int(input(""))
+        return int(input())
+
+    def compile(self) -> str:
+        return "int(input())"
+
+
+BASIC_PROGRAM = Print(
+    Plus(Times(Literal(13), Literal(2)), Times(GetNumber(), Literal(7)))
+)
+B = BASIC_PROGRAM
