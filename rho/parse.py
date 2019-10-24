@@ -1,6 +1,6 @@
 from typing import *
 
-from rho_lex import Token
+from rho.lex import Token
 
 
 JSON = Any
@@ -33,7 +33,7 @@ def _bool(tokens: List[Token], i: int) -> Tuple[bool, int]:
 def _kv(tokens: List[Token], i: int) -> Tuple[KV, int]:
     key, _ = _string(tokens, i)
     assert tokens[i + 1].kind == "colon", i
-    res = parse(tokens, i + 2)
+    res = _parse(tokens, i + 2)
     if res is None:
         raise RuntimeError(f"wtf i: {i}")
     return (key, res[0]), res[1]
@@ -65,7 +65,7 @@ def _array(tokens: List[Token], i: int) -> Tuple[List[JSON], int]:
     items = []
 
     while j < len(tokens) and tokens[j].kind != "close_bracket":
-        item, k = parse(tokens, j)
+        item, k = _parse(tokens, j)
         assert k < len(tokens)
         assert tokens[k].kind in ("comma", "close_bracket")
         items.append(item)
@@ -79,7 +79,7 @@ def _array(tokens: List[Token], i: int) -> Tuple[List[JSON], int]:
     return items, j + 1
 
 
-def parse(tokens: List[Token], i: int = 0) -> Tuple[Dict, int]:
+def _parse(tokens: List[Token], i: int) -> Tuple[Dict, int]:
     token = tokens[i]
 
     f = {
@@ -93,6 +93,11 @@ def parse(tokens: List[Token], i: int = 0) -> Tuple[Dict, int]:
     }[token.kind]
 
     return f(tokens, i)
+
+
+def parse(tokens: List[Token]) -> JSON:
+     js, _ = _parse(tokens, i=0)
+     return js
 
 
 __all__ = ["parse"]
