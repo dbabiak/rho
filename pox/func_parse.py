@@ -1,3 +1,4 @@
+from colorama import Fore, Style
 from dataclasses import dataclass
 from typing import List, Dict, Any, Union, Tuple, Sequence
 
@@ -51,7 +52,7 @@ class Var(AST):
 @dataclass(frozen=True)
 class Function(AST):
     name: str
-    parameters: List[str]
+    parameters: Sequence[str]
     body: Block
 
 
@@ -70,7 +71,7 @@ Expr = Union[Binary, Literal, Grouping, Function, FunctionApply]
 Statement = Union[FunctionApply, Print]  # Var, Function
 
 
-def check(tokens: Tuple[Token], i: int, n: int, expected: Sequence[TokenType]) -> None:
+def check(tokens: Sequence[Token], i: int, n: int, expected: Sequence[TokenType]) -> None:
     for j in range(n):
         k = i + j
         if k > len(tokens):
@@ -79,21 +80,27 @@ def check(tokens: Tuple[Token], i: int, n: int, expected: Sequence[TokenType]) -
         token = tokens[k]
 
         if token.token_type is not expected[j]:
-            try:
-                marked = src[:k] + '@' + src[k + 1:]
-                print(marked)
-            except Exception:
-                pass
-            raise RuntimeError(f"""
-Assert failed! 
-
-Expected {expected[k]}
-Character: {token.char}
-Look for @ above
-            """)
+            msg = f"Expected {expected[j]}\nCharacter: {token.char}"
+            panic(tokens, k, msg)
 
 
-def _program(tokens: Tuple[Token], i: int) -> Tuple[Program, int]:
+def panic(tokens: Sequence[Token], i: int, msg: str) -> None:
+    color = Fore.LIGHTRED_EX
+    try:
+        token = tokens[i]
+        start = token.char
+        end = token.char + len(token.lexeme)
+        print(src[:start], end='')
+        err = src[start:end]
+        print(f"{color}{err}{Style.RESET_ALL}", end='')
+        print(src[end:])
+    except Exception:
+        raise
+    msg += f'\n{color}Look for this above{Style.RESET_ALL}'
+    raise RuntimeError(msg)
+
+
+def _program(tokens: Sequence[Token], i: int) -> Tuple[Program, int]:
     statements: List[Statement] = []
     j = i
     while j < len(tokens):
@@ -109,18 +116,18 @@ def _program(tokens: Tuple[Token], i: int) -> Tuple[Program, int]:
     return program, j
 
 
-def _print(tokens: Tuple[Token], i: int) -> Tuple[Print, int]:
+def _print(tokens: Sequence[Token], i: int) -> Tuple[Print, int]:
     check(tokens, i, 2, (PRINT, OPEN_PAREN,))
     expr, j = _expression(tokens, i + 2)
-    assert tokens[j].token_type is CLOSE_PAREN
+    check(tokens, j, 1, (CLOSE_PAREN,))
     return Print(expr), j + 1
 
 
-def _expression(tokens: Tuple[Token], i: int) -> Tuple[Expr, int]:
+def _expression(tokens: Sequence[Token], i: int) -> Tuple[Expr, int]:
     return _addition(tokens, i)
 
 
-def _addition(tokens: Tuple[Token], i: int) -> Tuple[Expr, int]:
+def _addition(tokens: Sequence[Token], i: int) -> Tuple[Expr, int]:
     expr, j = _multiplication(tokens, i)
 
     while j < len(tokens) and tokens[j].token_type is PLUS:
@@ -131,7 +138,7 @@ def _addition(tokens: Tuple[Token], i: int) -> Tuple[Expr, int]:
     return expr, j
 
 
-def _multiplication(tokens: Tuple[Token], i: int) -> Tuple[Expr, int]:
+def _multiplication(tokens: Sequence[Token], i: int) -> Tuple[Expr, int]:
     expr, j = _primary(tokens, i)
 
     while j < len(tokens) and tokens[j].token_type is STAR:
@@ -142,7 +149,7 @@ def _multiplication(tokens: Tuple[Token], i: int) -> Tuple[Expr, int]:
     return expr, j
 
 
-def _primary(tokens: Tuple[Token], i: int) -> Tuple[Expr, int]:
+def _primary(tokens: Sequence[Token], i: int) -> Tuple[Expr, int]:
     token = tokens[i]
 
     if token.token_type is NUMBER:
@@ -153,17 +160,19 @@ def _primary(tokens: Tuple[Token], i: int) -> Tuple[Expr, int]:
         assert tokens[j].token_type is CLOSE_PAREN
         return Grouping(expr), j + 1
 
+    panic(tokens, i, msg="Fell off the end of _primary")
 
-def types(ts: Tuple[Token]):
+
+def types(ts: Sequence[Token]):
     return tuple(t.token_type for t in ts)
 
 
-def _block(tokens: Tuple[Token], i: int) -> Tuple[Block, int]:
+def _block(tokens: Sequence[Token], i: int) -> Tuple[Block, int]:
     assert tokens[i].token_type is OPEN_BRACE
     statements = []
 
 
-def _function(tokens: Tuple[Token], i: int) -> Tuple[AST, int]:
+def _function(tokens: Sequence[Token], i: int) -> Tuple[AST, int]:
     assert types(tokens[i:i+2]) == (FUN, OPEN_PAREN)
 
     parameters = []
@@ -180,7 +189,7 @@ def _function(tokens: Tuple[Token], i: int) -> Tuple[AST, int]:
     block = _block(tokens, j + 1)
 
 
-def parse(tokens: Tuple[Token]) -> AST:
+def parse(tokens: Sequence[Token]) -> AST:
     ast, _ = _program(tokens, 0)
     return ast
 
@@ -189,8 +198,8 @@ from pprint import pprint
 
 src = '''
 print(1);
-print(2);
-print(42 + 7 * 3);
+print(3);
+print(42 + 7 + (3));
 '''
 ts = tokenize(src)
 pprint(dict(enumerate(types(ts))))
