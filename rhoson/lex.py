@@ -143,4 +143,4 @@ def tokenize(src: str) -> List[Token]:
     return [t for t in tokens if t.kind != "whitespace"]
 
 
-__all__ = ["tokenize"]
+__all__ = ["tokenize", "Token"]

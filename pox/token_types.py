@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Type
 
 
-@dataclass
+@dataclass(frozen=True)
 class TokenType:
     name: str
 

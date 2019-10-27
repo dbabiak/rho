@@ -1,6 +1,6 @@
 from typing import *
 
-from rho.lex import Token
+from rhoson.lex import Token
 
 
 JSON = Any
@@ -96,8 +96,8 @@ def _parse(tokens: List[Token], i: int) -> Tuple[Dict, int]:
 
 
 def parse(tokens: List[Token]) -> JSON:
-     js, _ = _parse(tokens, i=0)
-     return js
+    js, _ = _parse(tokens, i=0)
+    return js
 
 
 __all__ = ["parse"]
