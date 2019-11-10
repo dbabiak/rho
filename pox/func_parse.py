@@ -2,11 +2,15 @@ from colorama import Fore, Style
 from dataclasses import dataclass
 from typing import List, Dict, Any, Union, Tuple, Sequence
 
-from pox.token_types import NUMBER, PLUS, OPEN_PAREN, CLOSE_PAREN, STAR, FUN, IDENTIFIER, COMMA, OPEN_BRACE, CLOSE_BRACE, PRINT, SEMICOLON, TokenType
+from pox.token_types import NUMBER, PLUS, OPEN_PAREN, CLOSE_PAREN, STAR, FUN, IDENTIFIER, COMMA, OPEN_BRACE, CLOSE_BRACE, PRINT, SEMICOLON, TokenType, RETURN
 from pox.tokenizer import Token, Tuple, TypeVar, Generic, Callable
 from operator import add, mul
 
 T = TypeVar('T')
+
+
+class Src:
+    src = ''
 
 
 # why even have an AST class at this point?
@@ -39,6 +43,11 @@ class Literal(AST, Generic[T]):
 
 
 @dataclass(frozen=True)
+class Identifier(AST):
+    symbol: str
+
+
+@dataclass(frozen=True)
 class Grouping(AST):
     expr: AST
 
@@ -67,8 +76,20 @@ class Print(AST):
     expr: 'Expr'
 
 
-Expr = Union[Binary, Literal, Grouping, Function, FunctionApply]
+# how is this different from a literal?
+@dataclass(frozen=True)
+class Value(AST, Generic[T]):
+    val: T
+
+
+
+
+Expr = Union[Binary, Literal, Grouping, Function, FunctionApply, Identifier]
 Statement = Union[FunctionApply, Print]  # Var, Function
+
+@dataclass(frozen=True)
+class Return(AST):
+    expr: Expr
 
 
 def check(tokens: Sequence[Token], i: int, n: int, expected: Sequence[TokenType]) -> None:
@@ -85,6 +106,7 @@ def check(tokens: Sequence[Token], i: int, n: int, expected: Sequence[TokenType]
 
 
 def panic(tokens: Sequence[Token], i: int, msg: str) -> None:
+    src = Src.src
     color = Fore.LIGHTRED_EX
     try:
         token = tokens[i]
@@ -100,18 +122,36 @@ def panic(tokens: Sequence[Token], i: int, msg: str) -> None:
     raise RuntimeError(msg)
 
 
+def _stmt(tokens: Sequence[Token], i: int) -> Tuple[Any, int]:
+    if tokens[i].token_type is PRINT:
+        stmt, j = _print(tokens, i)
+        assert tokens[j].token_type is SEMICOLON, (j, tokens[j])
+    elif tokens[i].token_type is FUN:
+        stmt, j = _function(tokens, i)
+        # assert tokens[j].token_type is SEMICOLON, (j, tokens[j])
+    elif tokens[i].token_type is RETURN:
+        stmt, j = _return(tokens, i)
+        return stmt, j
+    else:
+        stmt, j = _expression(tokens, i)
+        assert tokens[j].token_type is SEMICOLON, (j, tokens[j])
+    return stmt, j + 1
+
+
+def _return(tokens: Sequence[Token], i: int) -> Tuple[Return, int]:
+    assert tokens[i].token_type is RETURN
+    expr, j = _expression(tokens, i + 1)
+    assert tokens[j].token_type is SEMICOLON
+    return Return(expr), j + 1
+
+
 def _program(tokens: Sequence[Token], i: int) -> Tuple[Program, int]:
     statements: List[Statement] = []
     j = i
     while j < len(tokens):
-        if tokens[j].token_type is PRINT:
-            stmt, k = _print(tokens, j)
-        else:
-            stmt, k = _expression(tokens, j)
-        assert tokens[k].token_type is SEMICOLON
+        stmt, k = _stmt(tokens, j)
         statements.append(stmt)
-        j = k + 1
-
+        j = k
     program = Program(tuple(statements))
     return program, j
 
@@ -155,6 +195,9 @@ def _primary(tokens: Sequence[Token], i: int) -> Tuple[Expr, int]:
     if token.token_type is NUMBER:
         return Literal(float(token.lexeme)), i + 1
 
+    if token.token_type is IDENTIFIER:
+        return Identifier(symbol=token.lexeme), i + 1
+
     if token.token_type is OPEN_PAREN:
         expr, j = _expression(tokens, i + 1)
         assert tokens[j].token_type is CLOSE_PAREN
@@ -169,14 +212,23 @@ def types(ts: Sequence[Token]):
 
 def _block(tokens: Sequence[Token], i: int) -> Tuple[Block, int]:
     assert tokens[i].token_type is OPEN_BRACE
-    statements = []
+    j = i + 1
+    statements: List[Statement] = []
+    while j < len(tokens) and tokens[j].token_type is not CLOSE_BRACE:
+        stmt, k = _stmt(tokens, j)
+        statements.append(stmt)
+        j = k
+    assert tokens[j].token_type is CLOSE_BRACE
+    return Block(tuple(statements)), j + 1
 
 
 def _function(tokens: Sequence[Token], i: int) -> Tuple[AST, int]:
-    assert types(tokens[i:i+2]) == (FUN, OPEN_PAREN)
+    assert types(tokens[i:i+3]) == (FUN, IDENTIFIER, OPEN_PAREN)
 
+    name = tokens[1].lexeme
+
+    j = i + 3
     parameters = []
-    j = i + 2
 
     while j < len(tokens) and tokens[j].token_type is not CLOSE_PAREN:
         assert tokens[j].token_type is IDENTIFIER
@@ -184,26 +236,29 @@ def _function(tokens: Sequence[Token], i: int) -> Tuple[AST, int]:
         assert tokens[j + 1].token_type in (COMMA, CLOSE_PAREN)
         if tokens[j + 1].token_type is COMMA:
             j += 2
+        else:
+            j += 1
     assert j < len(tokens)
     assert tokens[j].token_type is CLOSE_PAREN
-    block = _block(tokens, j + 1)
+    block, k = _block(tokens, j + 1)
+
+    if k < len(tokens) and tokens[k].token_type is SEMICOLON:
+        k += 1
+
+    return Function(name=name, parameters=parameters, body=block), k
 
 
-def parse(tokens: Sequence[Token]) -> AST:
+def _parse(tokens: Sequence[Token]) -> AST:
     ast, _ = _program(tokens, 0)
     return ast
 
-from pox.tokenizer import tokenize
-from pprint import pprint
 
-src = '''
-print(1);
-print(3);
-print(42 + 7 + (3));
-'''
-ts = tokenize(src)
-pprint(dict(enumerate(types(ts))))
-ast = parse(ts)
+def lex_and_parse(src: str) -> AST:
+    from pox.tokenizer import tokenize
+    Src.src = src
+    tokens = tokenize(src)
+    ast = _parse(tokens)
+    return ast
 
 
 def to_json(ast: AST) -> Dict[str, Any]:
@@ -249,11 +304,24 @@ def to_json(ast: AST) -> Dict[str, Any]:
             ]
         }
 
+    if isinstance(ast, Return):
+        return {
+            "type": "return",
+            "expr": to_json(ast.expr),
+        }
+
+    if isinstance(ast, Function):
+        return {
+            "type": "function",
+            "name": ast.name,
+            "parameters": ast.parameters,
+            "body": [to_json(x) for x in ast.body.statements],
+        }
+
+    if isinstance(ast, Identifier):
+        return {
+            "type": "identifier",
+            "symbol": ast.symbol,
+        }
+
     assert False, repr(ast)
-
-
-js = to_json(ast)
-
-import json
-
-print(json.dumps(js, indent=4))
